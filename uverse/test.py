@@ -7,10 +7,6 @@ import time
 import requests
 from BeautifulSoup import BeautifulSoup as BS
 
-gateway_ip = '192.168.1.254'
-
-home_url = 'http://%s/cgi-bin/home.ha' % gateway_ip
-
 picklefile = 'uverse.pickle'
 
 interval = 10
@@ -18,16 +14,26 @@ interval = 10
 class LogEntry(object):
     def __init__(self, ping_id, statustable, sendtime, recvtime, rstatuscode):
         pass
-    
-def get_status(url):
-    now = datetime.now()
-    r = requests.get(url)
-    statustable = None
-    if r.ok:
-        b = BS(r.content)
-        statustable = b.find('table')
-    return r, statustable
 
+def is_state_good(span):
+    if span['class'] == 'state-good':
+        return True
+    elif span['class'] == 'state-bad':
+        return False
+    else:
+        raise RuntimeError, "Bad span %s" % span
+    
+
+def is_up(statustable):
+    spans = statustable.findAll('span')
+    if len(spans) != 2:
+        raise RuntimeError, "Improper statustable"
+    broadband_connection_span, line_up_span = spans
+    return tuple(map(is_state_good, spans))
+
+
+def get_bad_entries(blist):
+    return [e for e in blist if is_up(e[1]) != (True, True)]
 
 def mainloop():
     if not os.path.isfile(picklefile):
@@ -42,19 +48,16 @@ def mainloop():
         recvtime = datetime.now()
         entry = (ping_id, statustable, sendtime, recvtime, r.status_code)
         biglist.append(entry)
-        ping_id += 1
+        
         with file(picklefile, 'w') as pf:
             Pickle.dump(biglist, pf)
-        if not ping_id % 500:
-            newfile = '%s.page.%05d' % (picklefile, ping_id)
-            with file(newfile, 'w') as pf:
-                Pickle.dump(biglist, pf)
-            biglist = []
         time.sleep(interval)
         
         
-        
+biglist = Pickle.load(file(picklefile))
+
         
 if __name__ == '__main__':
-    mainloop()
+    bl = biglist
+    
     
